@@ -1,4 +1,4 @@
-suitedbupgrade
-==============
+PostGIS upgrade utility
+=======================
 
-A script that upgrades all PostGIS 1.x databases to 2.0.
+A script that converts PostGIS databases from OpenGeo Suite 2.x for use in OpenGeo Suite 3.x.
