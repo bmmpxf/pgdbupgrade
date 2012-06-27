@@ -4,15 +4,17 @@
 # Automates the data loading process from OpenGeo Suite 2.5 to 3.0
 # (PostGIS 1.5 to PostGIS 2.0)
 
-use DBI;
-package DBD::pg;
-
 use warnings;
 use strict;
 
 # -------------------------
 # DBI Graveyard
+
 #TODO: None of this has worked yet
+
+#use DBI;
+#package DBD::pg;
+
 
 #my $dbh = DBI->connect("dbi:Pg:dbname=medford;host=localhost;port=54321",'postgres','',{AutoCommit => 0, RaiseError => 1, PrintError => 0});
 
@@ -41,8 +43,7 @@ Usage:	$me [--backup|--restore] [dumppath]
 
 print "OpenGeo Suite PostGIS backup/restore utility.\n";
 
-#TODO: Check for postgis_restore.pl
-#TODO: Include postgis_restore.pl inside script?  How?
+
 
 #TODO: Silent running of these programs
 die "$me:\tUnable to find 'pg_dump' on the path.\n" if ! `pg_dump --version`;
@@ -167,6 +168,11 @@ sub backup {
 
 sub restore {
 
+    #TODO: Include postgis_restore.pl inside script?  How?
+  if (! -f "postgis_restore.pl") {
+    die "FATAL: postgis_restore.pl not found. Must be in current directory.\n";
+  }
+
   # Check that database is responding
   #TODO: Better way to do this?
   my $psqlcheck = `psql -t -A -d postgres -c "SELECT 1+1"` ||
@@ -180,6 +186,7 @@ sub restore {
 
   my @pgver = split(/ /,"$pgcheck");
   my $pgver = $pgver[0];
+  chomp $pgver;
 
   # May not be necessary anymore
   if (substr($pgver, 0, 1) != 2) {
@@ -187,16 +194,18 @@ sub restore {
   }
   print "PostGIS version $pgver found.\n";
 
-  print "Restoring databases from $dumppath\n";
+  print "Restoring databases and roles from directory: $dumppath\n";
 
   # Restore the roles
-  my $dbrolerestore = `psql $dumppath/roles.sql` ||
+  #TODO: What to do with role that already exist?
+  print "Restoring roles...\n";
+  my $dbrolerestore = `psql -f $dumppath/roles.sql` ||
     die "FATAL: roles.sql not found.  Maybe the dumppath isn't correct?";
 
   # Find all the dump files
   opendir my $dir, $dumppath || die "Cannot open directory: $!";
   my @dmpfiles = grep { -f && /\.dmp$/ } readdir $dir;
-  closedir $dumppath;
+  closedir $dir;
   print "Found the following files:\n";
   for my $file (@dmpfiles) {
     print "$file\n";
@@ -212,17 +221,25 @@ sub restore {
   # Create, convert, and load the new DBs
   for my $newdb (@newdblist) {
     print "Restoring database: $newdb\n";
-    print "Creating new database in system:\n";
+    print "Creating new database in system...\n";
     #TODO: What if database already exists?
-    my $createdb = `createdb $newdb`
-    print "Adding postgis extension to new database:\n";
+    my $createdb = `createdb $newdb`;
+    print "Adding postgis extension to new database...\n";
     my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
     my $newdbfile = $newdb.".dmp";
-    print "Coverting $newdbfile to PostGIS 2.0 format:\n";
-    my $convert = `postgis_restore.pl $newdbfile`;
-    print "Loading into PostGIS 2.0:\n";
-    my $psql = `psql $newdb $newdbfile`;
-    print "Restore of database $newdb complete\n\n";
+    print "Converting $newdbfile to PostGIS 2.0 format...\n";
+    my $convert = `perl postgis_restore.pl $newdbfile > $newdb.sql`;
+    unlink("$dumppath/$newdbfile.lst");
+    # Did it work? If zero byte file, no
+    my $filesize = -s "$newdb.sql";
+    if ($filesize != 0) {
+      print "File: $dumppath/$newdb.sql created.\n";
+      print "Loading into PostGIS 2.0...\n";
+      my $psql = `psql -d $newdb -f $newdb.sql`;
+      print "Restore of database $newdb complete.\n\n";
+    } else {
+      print "WARNING: postgis_restore.pl conversion of $newdb database failed. Skipping...\n\n";
+    } 
   }
 
 }
