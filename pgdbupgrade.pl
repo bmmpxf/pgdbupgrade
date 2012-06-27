@@ -59,12 +59,8 @@ my $dumppath = $ARGV[1];
 #      Or do we pass these?
 #      Assuming we use env vars now
 
-#TODO: Fail if this command fails
-my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"`;
-if (not $psqlcheck) {
-  print "Can't connect to database.  Please check connections.\n";
-  exit;
-}
+my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"` ||
+  die("Can't connect to database.  Please check connection parameters.\n");
 
 my @pgver = split(/ /,"$psqlcheck");
 my $pgver = $pgver[0];
