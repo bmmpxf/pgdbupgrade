@@ -31,13 +31,15 @@ my $me = $0;
 
 # Usage
 my $usage = qq{
-Usage:	$me [--backup|--restore] <dumppath>
+Usage:	$me [--backup|--restore] [dumppath]
         Creates a backup of an OpenGeo Suite 2.x database system.
         Restores this backup for use in an OpenGeo Suite 3.x database system. 
         <dumppath> = location to save backup files
         Uses default connection parameters. Please ensure that
         PGHOST, PGUSER, PGPORT are set correctly.
 };
+
+print "OpenGeo Suite PostGIS backup/restore utility.\n";
 
 #TODO: Check for postgis_restore.pl
 #TODO: Include postgis_restore.pl inside script?  How?
@@ -73,25 +75,13 @@ open (TEST, ">$dumppath/tmp");
 close (TEST) || die("Could not write to \"$dumppath\".  Please check permissions.\n");
 unlink("$dumppath/tmp"); # Clean up;
 
-#TODO: Do we rely on env vars for port, username, password, etc
-#      Or do we pass these?
-#      Assuming we use env vars now
-
-my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"` ||
-  die("Can't connect to database.  Please check connection parameters.\n");
-
-my @pgver = split(/ /,"$psqlcheck");
-my $pgver = $pgver[0];
-
-
-
 # Do it!
 my $result;
 if (($operation eq "-b") || ($operation eq "--backup")) {
-  $result = backup($dumppath, $pgver);
+  $result = backup($dumppath);
 }
 if (($operation eq "-r") || ($operation eq "--restore")) {
-  $result = restore($dumppath, $pgver);
+  $result = restore($dumppath);
 }
 
 # Bad $operation will have no $result
@@ -112,9 +102,17 @@ exit;
 
 sub backup {
 
+  #TODO: Not rely on env vars for connection params
+  my $pgcheck = `psql -t -A -c "SELECT postgis_version()"` ||
+    die "FATAL: Can't connect to database.  Please check connection parameters.\n";
+
+  my @pgver = split(/ /,"$pgcheck");
+  my $pgver = $pgver[0];
+
+
   # Check for PostGIS 1.x
   if (substr($pgver, 0, 1) != 1) {
-    die "$me:\tPostGIS 1.x required for this operation.\n";
+    die "FATAL: PostGIS 1.x required for this operation.\n";
   }
   print "PostGIS version $pgver found.\n";
 
@@ -169,9 +167,23 @@ sub backup {
 
 sub restore {
 
+  # Check that database is responding
+  #TODO: Better way to do this?
+  my $psqlcheck = `psql -t -A -d postgres -c "SELECT 1+1"` ||
+    die "FATAL: Can't connect to database.  Please check connection parameters.\n";
+
   # Check for PostGIS 2.x
+  #TODO: Not rely on env vars for connection params
+  #TODO: May not be necessary to query postgres for postgis extension
+  my $pgcheck = `psql -t -A -d postgres -c "SELECT default_version from pg_available_extensions where name = 'postgis'"` ||
+    die "FATAL: PostGIS 2.x not found.\n";
+
+  my @pgver = split(/ /,"$pgcheck");
+  my $pgver = $pgver[0];
+
+  # May not be necessary anymore
   if (substr($pgver, 0, 1) != 2) {
-    die "$me:\tPostGIS 2.x required for this operation.\n";
+    die "FATAL: PostGIS 2.x required for this operation.\n";
   }
 
   print "Restoring databases from $dumppath\n";
