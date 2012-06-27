@@ -34,7 +34,7 @@ my $usage = qq{
 Usage:	$me [--backup|--restore] [dumppath]
         Creates a backup of an OpenGeo Suite 2.x database system.
         Restores this backup for use in an OpenGeo Suite 3.x database system. 
-        <dumppath> = location to save backup files
+        [dumppath] = location to save backup files, or current directory.
         Uses default connection parameters. Please ensure that
         PGHOST, PGUSER, PGPORT are set correctly.
 };
@@ -185,14 +185,16 @@ sub restore {
   if (substr($pgver, 0, 1) != 2) {
     die "FATAL: PostGIS 2.x required for this operation.\n";
   }
+  print "PostGIS version $pgver found.\n";
 
   print "Restoring databases from $dumppath\n";
 
   # Restore the roles
-  my $dbrolerestore = `psql $dumppath/roles.sql`;
+  my $dbrolerestore = `psql $dumppath/roles.sql` ||
+    die "FATAL: roles.sql not found.  Maybe the dumppath isn't correct?";
 
   # Find all the dump files
-  opendir my $dir, $dumppath or die "Cannot open directory: $!";
+  opendir my $dir, $dumppath || die "Cannot open directory: $!";
   my @dmpfiles = grep { -f && /\.dmp$/ } readdir $dir;
   closedir $dumppath;
   print "Found the following files:\n";
@@ -211,7 +213,9 @@ sub restore {
   for my $newdb (@newdblist) {
     print "Restoring database: $newdb\n";
     print "Creating new database in system:\n";
-    my $createdb = `createdb $newdb`;
+    #TODO: What if database already exists?
+    my $createdb = `createdb $newdb`
+    print "Adding postgis extension to new database:\n";
     my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
     my $newdbfile = $newdb.".dmp";
     print "Coverting $newdbfile to PostGIS 2.0 format:\n";
