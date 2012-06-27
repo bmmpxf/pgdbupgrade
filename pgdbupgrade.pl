@@ -4,19 +4,11 @@
 # Automates the data loading process from OpenGeo Suite 2.5 to 3.0
 # (PostGIS 1.5 to PostGIS 2.0)
 
-
-#TODO: Usage!
-#TODO: Error handling!
-
-# Connect to Postgres
 use DBI;
 package DBD::pg;
 
 use warnings;
 use strict;
-
-#TODO: Check for createdb, psql, pg_dump, pg_dumpall, postgis_restore.pl
-
 
 # -------------------------
 # DBI Graveyard
@@ -45,13 +37,15 @@ Usage:	$me [--backup|--restore] <dumppath>
         <dumppath> = location to save backup files
 };
 
-# Lists the arguments
-#print "The command line arguments supplied are:\n";
-#for my $arg (@ARGV) {
-#  print "* $arg\n";
-#}
-#my $argtot = scalar @ARGV;
-#print "Total number of arguments supplied: ", $argtot, "\n";
+#TODO: Check for postgis_restore.pl
+#TODO: Include postgis_restore.pl inside script?  How?
+
+#TODO: Silent running of these programs
+die "$me:\tUnable to find 'pg_dump' on the path.\n" if ! `pg_dump --version`;
+die "$me:\tUnable to find 'pg_dumpall' on the path.\n" if ! `pg_dumpall --version`;
+die "$me:\tUnable to find 'pg_restore' on the path.\n" if ! `pg_restore --version`;
+die "$me:\tUnable to find 'createdb' on the path.\n" if ! `createdb --version`;
+die "$me:\tUnable to find 'psql' on the path.\n" if ! `psql --version`;
 
 # Check for proper arguments
 die $usage if (@ARGV != 2);
@@ -59,25 +53,41 @@ die $usage if (@ARGV != 2);
 my $operation = $ARGV[0];
 my $dumppath = $ARGV[1];
 
+#TODO: Do we rely on env vars for port, username, password, etc
+#      Or do we pass these?
+#      Assuming we use env vars now
+
+#TODO: Fail if this command fails
+my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"`;
+if (not $psqlcheck) {
+  print "Can't connect to database.  Please check connections.\n";
+  exit;
+}
+
+my @pgver = split(/ /,"$psqlcheck");
+my $pgver = $pgver[0];
+
+# Check that $dumppath exists
+#TODO: Sanitize $dumppath to account for paths with spaces
+#      Replace spaces with escaped spaces?
+#      May already be working
+#TODO:Check for write permissions on $dumppath
 if (not -d $dumppath) {
   print "Error: $dumppath doesn't exist";
   die $usage;
 }
 
-#TODO: Sanitize $dumppath to account for paths with spaces (and removing quotes)
 
-
+# Do it!
 my $result;
-
-#TODO: Need to pipe in args
 if (($operation eq "-b") || ($operation eq "--backup")) {
-  $result = backup($dumppath);
+  $result = backup($dumppath, $pgver);
 }
 if (($operation eq "-r") || ($operation eq "--restore")) {
-  $result = restore($dumppath);
+  $result = restore($dumppath, $pgver);
 }
 
-# Successful running of a function
+# Bad $operation will have no $result
 if (!defined($result)) {
   die $usage;
 }
@@ -89,39 +99,39 @@ exit;
 
 
 
-# ---------
+# ------
 # Backup
-# ---------
+# ------
 
 sub backup {
 
-  #TODO: Check for commands on path
-  #die "$me:\tUnable to find 'pg_dump' on the path.\n" if ! `pg_dump --version`;
-  #die "$me:\tUnable to find 'pg_restore' on the path.\n" if ! `pg_restore --version`;
-  #TODO: Sanity check (does the db even exist?)
+  # Check for PostGIS 1.x
+  if (substr($pgver, 0, 1) != 1) {
+    die "$me:\tPostGIS 1.x required for this operation.\n";
+  }
+  print "PostGIS version $pgver found.\n";
 
   print "Backing up databases to $dumppath\n";
 
   # Get a list of all relevant databases
   #TODO: How to exclude non-spatial DBs?
-  my @dblist = `psql -t -A -p 54321 -d postgres --command "SELECT datname FROM pg_database WHERE datistemplate IS FALSE and datname NOT LIKE 'postgres';"`;
+  my @dblist = `psql -t -A -d postgres --command "SELECT datname FROM pg_database WHERE datistemplate IS FALSE and datname NOT LIKE 'postgres';"`;
 
   # Total number of databases found
   my $dbtot = scalar @dblist;
   my $count;
-  print "Found the following $dbtot databases:\n";
+  print "Found the following $dbtot databases:\n {";
   for ($count = 0; $count < $dbtot; $count++) {
     chomp($dblist[$count]);
-    print "$dblist[$count]\n";
+    print "$dblist[$count] ";
   }
-
+  print "}\n";
 
   # dump each database to disk
-  #TODO: Suppress warning:
-  # pg_dump: [custom archiver] WARNING: ftell mismatch with expected position -- ftell used
+  #TODO: Suppress ftell mismatch warning
   for my $db (@dblist) {
     print "Dumping: $db\n";
-    my $dbdump = `pg_dump -p 54321 -Fc $db`;
+    my $dbdump = `pg_dump -Fc $db`;
     open (MYFILE, ">$dumppath/$db.dmp");
     print MYFILE $dbdump;
     close (MYFILE);
@@ -129,24 +139,33 @@ sub backup {
 
   # dump the database roles
   print "Dumping: roles\n";
-  my $dbroledump = `pg_dumpall -p 54321 -r`;
+  my $dbroledump = `pg_dumpall -r`;
   open (MYFILE, ">$dumppath/roles.sql");
   print MYFILE $dbroledump;
   close (MYFILE);
 
+  # Summary
+  #TODO: Verify this list?
+  print "\nCreated the following files in \"$dumppath\":\n";
+  for ($count = 0; $count < $dbtot; $count++) {
+    chomp($dblist[$count]);
+    print " $dblist[$count].dmp\n";
+  }
+  print " roles.sql\n";
 
 }
 
 
-# ---------
+# -------
 # Restore
-# ---------
+# -------
 
 sub restore {
 
-
-  # This is now the restore operation.
-  #TODO: Separate this with command arguments
+  # Check for PostGIS 2.x
+  if (substr($pgver, 0, 1) != 2) {
+    die "$me:\tPostGIS 2.x required for this operation.\n";
+  }
 
   print "Restoring databases from $dumppath\n";
 
@@ -170,11 +189,12 @@ sub restore {
   }
 
   # Create, convert, and load the new DBs
-  #TODO: Need to "create extension postgis" on each new db 
   for my $newdb (@newdblist) {
     print "Restoring database: $newdb\n";
     print "Creating new database in system:\n";
     my $createdb = `createdb $newdb`;
+    #TODO: "Useless use of a constant (.dmp) in void context" why?
+    my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
     my $newdbfile = $newdb,".dmp";
     print "Coverting $newdbfile to PostGIS 2.0 format:\n";
     my $convert = `postgis_restore.pl $newdbfile`;
