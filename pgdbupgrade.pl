@@ -38,14 +38,14 @@ Usage:	$me [--backup|--restore] [dumppath]
         Restores this backup for use in an OpenGeo Suite 3.x database system. 
         [dumppath] = location to save backup files, or current directory.
         Uses default connection parameters. Please ensure that
-        PGHOST, PGUSER, PGPORT are set correctly.
+        PGHOST, PGUSER, PGPORT, PGPASSWORD are set correctly.
 };
 
 print "OpenGeo Suite PostGIS backup/restore utility.\n";
 
+my $os = $^O; # MSWin32 for Windows
 
-
-#TODO: Silent running of these programs
+#TODO: Silent running of these programs for failure
 die "$me:\tUnable to find 'pg_dump' on the path.\n" if ! `pg_dump --version`;
 die "$me:\tUnable to find 'pg_dumpall' on the path.\n" if ! `pg_dumpall --version`;
 die "$me:\tUnable to find 'pg_restore' on the path.\n" if ! `pg_restore --version`;
@@ -67,13 +67,13 @@ if (@ARGV == 1) {
 
 # Check that $dumppath exists
 if (not -d $dumppath) {
-  die("Path \"$dumppath\" doesn't exist.\n");
+  die "Path \"$dumppath\" doesn't exist.\n";
 }
 
 # Check for write permissions on $dumppath
 #TODO: Better way to do this?
 open (TEST, ">$dumppath/tmp");
-close (TEST) || die("Could not write to \"$dumppath\".  Please check permissions.\n");
+close (TEST) || die "Could not write to \"$dumppath\".  Please check permissions.\n";
 unlink("$dumppath/tmp"); # Clean up;
 
 # Do it!
@@ -168,9 +168,13 @@ sub backup {
 
 sub restore {
 
-    #TODO: Include postgis_restore.pl inside script?  How?
-  if (! -f "postgis_restore.pl") {
-    die "FATAL: postgis_restore.pl not found. Must be in current directory.\n";
+  
+  # Require postgis_restore.pl if not on Windows
+  if ((! $os eq "MSWin32") && (! -f "postgis_restore.pl")) {
+      die qq{
+FATAL: postgis_restore.pl not found. Must be in current directory. This
+       file can be found in your PostGIS 2 installation.\n
+};
   }
 
   # Check that database is responding
@@ -228,7 +232,14 @@ sub restore {
     my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
     my $newdbfile = $newdb.".dmp";
     print "Converting $newdbfile to PostGIS 2.0 format...\n";
-    my $convert = `perl postgis_restore.pl $newdbfile > $newdb.sql`;
+    # Windows will run the bundled .exe, others wil run the unbundled .pl
+    my $convert;
+    if ($os eq "MSWin32") {
+      $convert = `postgis_restore.exe $newdbfile > $newdb.sql` || 
+        die "FATAL: postgis_restore.exe not found.\n";
+    } else { # All others will have Perl
+      $convert = `perl postgis_restore.pl $newdbfile > $newdb.sql`;
+    }
     unlink("$dumppath/$newdbfile.lst");
     # Did it work? If zero byte file, no
     my $filesize = -s "$newdb.sql";
