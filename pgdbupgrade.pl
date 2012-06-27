@@ -66,14 +66,15 @@ my @pgver = split(/ /,"$psqlcheck");
 my $pgver = $pgver[0];
 
 # Check that $dumppath exists
-#TODO: Sanitize $dumppath to account for paths with spaces
-#      Replace spaces with escaped spaces?
-#      May already be working
-#TODO:Check for write permissions on $dumppath
 if (not -d $dumppath) {
-  print "Error: $dumppath doesn't exist";
-  die $usage;
+  die("Path \"$dumppath\" doesn't exist.\n");
 }
+
+# Check for write permissions on $dumppath
+#TODO: Better way to do this?
+open (TEST, ">$dumppath/tmp");
+close (TEST) || die("Could not write to \"$dumppath\".  Please check permissions.\n");
+unlink("$dumppath/tmp"); # Clean up;
 
 
 # Do it!
