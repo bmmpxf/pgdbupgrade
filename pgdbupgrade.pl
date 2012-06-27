@@ -50,20 +50,17 @@ die "$me:\tUnable to find 'createdb' on the path.\n" if ! `createdb --version`;
 die "$me:\tUnable to find 'psql' on the path.\n" if ! `psql --version`;
 
 # Check for proper arguments
-die $usage if (@ARGV != 2);
+die $usage if ((@ARGV > 2) || (@ARGV == 0));
 
+# If dumppath not specified, using current directory
 my $operation = $ARGV[0];
-my $dumppath = $ARGV[1];
-
-#TODO: Do we rely on env vars for port, username, password, etc
-#      Or do we pass these?
-#      Assuming we use env vars now
-
-my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"` ||
-  die("Can't connect to database.  Please check connection parameters.\n");
-
-my @pgver = split(/ /,"$psqlcheck");
-my $pgver = $pgver[0];
+my $dumppath;
+if (@ARGV == 1) {
+  print "Dumppath not specified, using current directory.\n";
+  $dumppath = ".";
+} else {
+  $dumppath = $ARGV[1];
+}
 
 # Check that $dumppath exists
 if (not -d $dumppath) {
@@ -75,6 +72,17 @@ if (not -d $dumppath) {
 open (TEST, ">$dumppath/tmp");
 close (TEST) || die("Could not write to \"$dumppath\".  Please check permissions.\n");
 unlink("$dumppath/tmp"); # Clean up;
+
+#TODO: Do we rely on env vars for port, username, password, etc
+#      Or do we pass these?
+#      Assuming we use env vars now
+
+my $psqlcheck = `psql -t -A -c "SELECT postgis_version()"` ||
+  die("Can't connect to database.  Please check connection parameters.\n");
+
+my @pgver = split(/ /,"$psqlcheck");
+my $pgver = $pgver[0];
+
 
 
 # Do it!
@@ -91,7 +99,7 @@ if (!defined($result)) {
   die $usage;
 }
 
-print "Operation complete";
+print "Operations complete.";
 exit;
 
 # End
@@ -120,13 +128,13 @@ sub backup {
   my $dbtot = scalar @dblist;
   my $count;
   print "Found the following $dbtot databases:\n {";
-  for ($count = 0; $count < $dbtot; $count++) {
+  for (my $count = 0; $count < $dbtot; $count++) {
     chomp($dblist[$count]);
     print "$dblist[$count] ";
   }
   print "}\n";
 
-  # dump each database to disk
+  # Dump each database to disk
   #TODO: Suppress ftell mismatch warning
   for my $db (@dblist) {
     print "Dumping: $db\n";
@@ -136,7 +144,7 @@ sub backup {
     close (MYFILE);
   }
 
-  # dump the database roles
+  # Dump the database roles
   print "Dumping: roles\n";
   my $dbroledump = `pg_dumpall -r`;
   open (MYFILE, ">$dumppath/roles.sql");
@@ -150,7 +158,7 @@ sub backup {
     chomp($dblist[$count]);
     print " $dblist[$count].dmp\n";
   }
-  print " roles.sql\n";
+  print "Users/Roles saved in:\n roles.sql\n";
 
 }
 
