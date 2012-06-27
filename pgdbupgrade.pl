@@ -35,6 +35,8 @@ Usage:	$me [--backup|--restore] <dumppath>
         Creates a backup of an OpenGeo Suite 2.x database system.
         Restores this backup for use in an OpenGeo Suite 3.x database system. 
         <dumppath> = location to save backup files
+        Uses default connection parameters. Please ensure that
+        PGHOST, PGUSER, PGPORT are set correctly.
 };
 
 #TODO: Check for postgis_restore.pl
@@ -193,9 +195,8 @@ sub restore {
     print "Restoring database: $newdb\n";
     print "Creating new database in system:\n";
     my $createdb = `createdb $newdb`;
-    #TODO: "Useless use of a constant (.dmp) in void context" why?
     my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
-    my $newdbfile = $newdb,".dmp";
+    my $newdbfile = $newdb.".dmp";
     print "Coverting $newdbfile to PostGIS 2.0 format:\n";
     my $convert = `postgis_restore.pl $newdbfile`;
     print "Loading into PostGIS 2.0:\n";
