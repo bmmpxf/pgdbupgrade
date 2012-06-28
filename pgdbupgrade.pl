@@ -168,10 +168,21 @@ sub backup {
 
 sub restore {
 
-  
+  # If on Windows and lacking postgis_restore.exe, try to muddle through
+  # by hoping for Perl
+  # TODO: Need to check for postgis_restore.exe when it's not on the path
+  #       Below only checks for the current directory
+  #  if (($os eq "MSWin32") && (! -f "postgis_restore.exe")) {
+  #  print qq{
+  #WARNING: postgis_restore.exe not found.  Will assume that you have Perl installed
+  #         and try to move forward.\n
+  #};
+  #  $os = "test" # So that we can try running Perl below
+  #}
+
   # Require postgis_restore.pl if not on Windows
   if ((! $os eq "MSWin32") && (! -f "postgis_restore.pl")) {
-      die qq{
+    die qq{
 FATAL: postgis_restore.pl not found. Must be in current directory. This
        file can be found in your PostGIS 2 installation.\n
 };
@@ -232,11 +243,10 @@ FATAL: postgis_restore.pl not found. Must be in current directory. This
     my $createpg = `psql -t -A -d $newdb -c "create extension postgis"`;
     my $newdbfile = $newdb.".dmp";
     print "Converting $newdbfile to PostGIS 2.0 format...\n";
-    # Windows will run the bundled .exe, others wil run the unbundled .pl
+    # Windows will run the .exe, others will run the separate Perl file
     my $convert;
     if ($os eq "MSWin32") {
-      $convert = `postgis_restore.exe $newdbfile > $newdb.sql` || 
-        die "FATAL: postgis_restore.exe not found.\n";
+      $convert = `postgis_restore.exe $newdbfile > $newdb.sql`
     } else { # All others will have Perl
       $convert = `perl postgis_restore.pl $newdbfile > $newdb.sql`;
     }
@@ -249,7 +259,7 @@ FATAL: postgis_restore.pl not found. Must be in current directory. This
       my $psql = `psql -d $newdb -f $newdb.sql`;
       print "Restore of database $newdb complete.\n\n";
     } else {
-      print "WARNING: postgis_restore.pl conversion of $newdb database failed. Skipping...\n\n";
+      print "WARNING: Conversion of $newdb database failed. Skipping...\n\n";
     } 
   }
 
